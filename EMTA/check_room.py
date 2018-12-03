@@ -3,6 +3,7 @@ from urllib.request import urlopen
 import ssl
 import telegram_send
 import time
+import multiprocessing as mp
 
 
 def run_fetcher():
@@ -28,64 +29,104 @@ def find_waiting_list(soup, name=None):
     waiting_next = items[1].find_all_next(text=True)
 
     # init variables
-    flag = False
-    notify_call = True
-    notify_wait = True
+    status = -1
+    position = -1
     count = 0
 
     # get calling list
     for each_name in calling_next[1:]:
         if each_name == name:
             count += 1
-            flag = True
-            if notify_call:
-                telegram_send.send(messages=['Your place in the calling list is %d.' % count,
-                                             'You can go to pick up your key now!'])
-                notify_call = False
-            print('Your place in the calling list is %d.' % count)
+            status = 1
+            position = count
+
         elif each_name == '\n':
-            continue
-        elif each_name == 'JÄRJEKORRAS':
             break
         else:
             count += 1
 
     # get waiting list
     count = 0
-    for each_name in waiting_next[2:]:
+    for each_name in waiting_next[1:]:
         if each_name == name:
             count += 1
-            flag = True
-            if notify_wait:
-                telegram_send.send(messages=['Your place in the calling list is %d.' % count])
-                notify_wait = False
-            print('Your place in the waiting list is %d.' % count)
-        elif each_name == '\n':
-            continue
-        elif each_name == 'VABANEVAD KLASSID:':
-            print('Number of waiting list: %d' % count)
+            status = 0
+            position = count
+
+        elif 'inimest' in each_name:
+            print('Number of waiting list: ' + each_name[:2])
+            total_number = int(each_name[:2])
             break
         else:
             count += 1
 
-    if not flag:
-        print('You are not in the list!')
-    return
+    return status, position, total_number
 
 def run(name):
     soup = run_fetcher()
-    find_waiting_list(soup, name)
-    return
+    status, position, num = find_waiting_list(soup, name)
+    return status, position, num
 
-def run_forever(name):
+def run_forever(name, debug=False, interval=30):
     try:
         print('Auto bot start running...')
+        if not debug:
+            telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name])
+
+        # init
+        wait_position = -1
+        call_position = -1
+        status = -1
+        send_call = True
+        send_wait = True
+
         while True:
-            run(name)
-            time.sleep(30)
+            status, position, num = run(name)
+
+            # check status
+            if status == -1:
+                print('You are not in the list!')
+
+            elif status == 0:
+                print('Your position in waiting list: %d' % position)
+                if wait_position != position:
+                    send_wait = True
+                    wait_position = position
+
+                if send_wait and not debug:
+                    telegram_send.send(messages=['You are in the waiting queue: %d/%d' % (position, num)])
+                    send_wait = False
+
+            elif status == 1:
+                print('Your position in calling list: %d' % position)
+                if call_position != position:
+                    send_call = True
+                    call_position = position
+
+                if send_call and not debug:
+                    telegram_send.send(messages=['You can go to pick up your key now!', 'position: %d.' % position])
+                    send_call = False
+
+            time.sleep(interval)
     except KeyboardInterrupt:
         print('bye:)')
     return
+
+class ClassRoom_Bot():
+    def __init__(self, name):
+        self.name = name
+        self.records = {}  # time: status
+        self.threads = []
+        return
+
+    def run_server(self):
+        p1 = mp.Process(target=run_forever, args=(self.name,), name='server_bot')
+        self.threads.append(p)
+        p2 = mp.Process(target=self.usr_interface, args=(self,), name='usr')
+        return
+
+    def usr_interface(self):
+        return
 
 
 if __name__ == '__main__':

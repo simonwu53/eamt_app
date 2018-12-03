@@ -67,9 +67,9 @@ def run_spy(name, debug=False, interval=30, init=3):
         print('> DEBUG: Auto bot start running...')
         if not debug:
             telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name],
-                               conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-xun.conf')
+                               conf='./config/telegram-send-xun.conf')
             telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name],
-                               conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-shan.conf')
+                               conf='./config/telegram-send-shan.conf')
 
         # init
         wait_position = -1
@@ -99,9 +99,9 @@ def run_spy(name, debug=False, interval=30, init=3):
 
                 if send_wait and not debug:
                     telegram_send.send(messages=['You are in the waiting queue: %d/%d' % (position, num)],
-                                       conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-xun.conf')
+                                       conf='./config/telegram-send-xun.conf')
                     telegram_send.send(messages=['You are in the waiting queue: %d/%d' % (position, num)],
-                                       conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-shan.conf')
+                                       conf='./config/telegram-send-shan.conf')
                     send_wait = False
 
             elif status == 1:
@@ -112,9 +112,9 @@ def run_spy(name, debug=False, interval=30, init=3):
 
                 if send_call and not debug:
                     telegram_send.send(messages=['You can go to pick up your key now!', 'position: %d.' % position],
-                                       conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-xun.conf')
+                                       conf='./config/telegram-send-xun.conf')
                     telegram_send.send(messages=['You can go to pick up your key now!', 'position: %d.' % position],
-                                       conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-shan.conf')
+                                       conf='./config/telegram-send-shan.conf')
                     send_call = False
 
             time.sleep(interval)
@@ -122,9 +122,9 @@ def run_spy(name, debug=False, interval=30, init=3):
         print('> DEBUG: bye:)')
         if not debug:
             telegram_send.send(messages=['Bot has been shut down. Bye:)'],
-                               conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-xun.conf')
+                               conf='./config/telegram-send-xun.conf')
             telegram_send.send(messages=['Bot has been shut down. Bye:)'],
-                               conf='/Users/simonwu/PycharmProjects/life_utils/EMTA/config/telegram-send-shan.conf')
+                               conf='./config/telegram-send-shan.conf')
     return
 
 class ClassRoom_Bot():

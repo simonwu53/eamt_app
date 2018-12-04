@@ -62,3 +62,5 @@ target/
 \.idea/
 
 EMTA/config/
+
+TG_server/tutorials/

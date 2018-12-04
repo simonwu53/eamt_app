@@ -4,7 +4,7 @@ from urllib.request import urlopen
 import ssl
 import telegram_send
 import time
-import multiprocessing as mp
+from threading import Thread
 
 
 def run_fetcher():
@@ -80,7 +80,9 @@ def run_spy(name, debug=False, interval=30, init=3):
         count_init = 0
 
         while True:
+            # get html and brew soup
             soup = run_fetcher()
+            # update queue status
             status, position, num = find_waiting_list(soup, name)
 
             # check status
@@ -128,15 +130,23 @@ def run_spy(name, debug=False, interval=30, init=3):
     return
 
 class ClassRoom_Bot():
-    def __init__(self, name):
-        self.name = name
-        self.records = {}  # time: status
-        self.threads = {}
+    def __init__(self, name, time_interval=30):
+        self.__name_list = [name]
+        self.__time_interval = time_interval
+        self.__records = {}  # time: status
+        self.__threads = {}
+        self.__soup = None
+        self.__url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid2.x'
+        self.__terminate = False
 
         # init user promt
-        p_usr = mp.Process(target=self.usr_interface, args=(self,), name='usr')
-        self.threads['usr'] = p_usr
+        p_usr = Thread(target=self.usr_interface)
+        self.__threads['usr_prompt'] = p_usr
         p_usr.start()
+        # init soup brewer
+        brewer = Thread(target=self.soup_brewer)
+        self.__threads['soup_brewer'] = brewer
+        brewer.start()
         return
 
     def run_server(self):
@@ -145,19 +155,57 @@ class ClassRoom_Bot():
     def init_server(self):
         return
 
-    def init_new_spy(self, name):
-        t_name = 'spy_%s' % self.name
-        p = mp.Process(target=run_spy, args=(self.name,), name=t_name)
-        self.threads[t_name] = p
-        p.start()
+    def init_spy(self):
         return
 
-    def terminate_spy(self, t_name):
-        p = self.threads[t_name]
+    def terminate_thread(self, t_name):
+        p = self.__threads[t_name]
         # send sigkill
         return
 
+    def spy_worker(self):
+
+        return
+
+    def soup_brewer(self):
+        print('Brewer started.')
+        while True:
+            if self.__terminate:
+                print('Terminating brewer...')
+                break
+            self.__soup = run_fetcher()
+            time.sleep(self.__time_interval)
+        print('Brewer stopped.')
+        return
+
     def usr_interface(self):
+        return
+
+    # functions to control the bot
+    def terminate_bot(self):
+        print('Terminating the bot...')
+        self.__terminate = True
+
+        for t in self.__threads:
+            print('Waiting thread %s to stop.' % t)
+            self.__threads[t].join()
+        print('Bye.')
+        return
+
+    def show_threads(self):
+        print('Working threads: ')
+        print(self.__threads.keys())
+        return
+
+    def get_soup(self):
+        return self.__soup
+
+    def add_name(self, name):
+        if type(name) == type(str):
+            self.__name_list.append(name)
+            print('Your name: %s added.' % name)
+        else:
+            print('Please input a valid name!')
         return
 
 

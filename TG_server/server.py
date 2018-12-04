@@ -6,8 +6,13 @@ import telepot
 from telepot.loop import MessageLoop
 from telepot.delegate import pave_event_space, per_chat_id, create_open
 import time
+
 import logging
-logging.basicConfig(filename='./logs/LOG.log', filemode='w', format='%(asctime)s - %(levelname)s:  %(message)s', level=logging.DEBUG)
+# fname = './logs/%s.log' % time.strftime("%Y-%m-%d-%H-%M", time.localtime())
+# with open(fname, 'w') as f:
+#     f.write('-----begining of the log------')
+# logging.basicConfig(filename=fname, filemode='w', format='%(asctime)s - %(levelname)s:  %(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(levelname)s:  %(message)s', level=logging.DEBUG)
 
 
 class TG_Bot_Server():
@@ -40,7 +45,7 @@ class MessageHandler(telepot.helper.ChatHandler):
         if content_type == 'text':
             # if start spy command received
             if msg['text'] == '/startspy':
-                logging.debug('Received a request to start spy. from: %s' % msg['username'])
+                logging.debug('Received a request to start spy. from: %s' % msg['from']['username'])
 
                 self.spy_started = True
                 self.sender.sendMessage('OK, please tell me your name. (the name displayed on the website)')
@@ -49,7 +54,7 @@ class MessageHandler(telepot.helper.ChatHandler):
             if self.spy_started == True:
                 name, status = self.check_name(msg['text'])
                 if status == 1:
-                    logging.debug('Spy run! name: %s, username: %s' % (name, msg['username']))
+                    logging.debug('Spy run! name: %s, username: %s' % (name, msg['from']['username']))
                     check_room.run_spy(name, debug=False)
                     logging.debug('Spy finished task.')
                     self.spy_started = False
@@ -61,6 +66,7 @@ class MessageHandler(telepot.helper.ChatHandler):
                     self.sender.sendMessage('Last name only use first character!')
                 return
 
+            logging.debug('Received other msg: %s. from: %s' % (msg['text'], msg['from']['username']))
             self.sender.sendMessage('Thanks for message. I will improve later!')
 
     def check_name(self, name):

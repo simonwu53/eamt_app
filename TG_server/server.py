@@ -66,6 +66,13 @@ class MessageHandler(telepot.helper.ChatHandler):
                     self.sender.sendMessage('Last name only use first character!')
                 return
 
+            if msg['text'] == '/start':
+                logging.debug('New user registered: %s %s' %
+                              (msg['from']['first_name'], msg['from']['last_name']))
+                self.sender.sendMessage('Hello, %s %s!' %
+                                        (msg['from']['first_name'], msg['from']['last_name']))
+                return
+
             logging.debug('Received other msg: %s. from: %s' % (msg['text'], msg['from']['username']))
             self.sender.sendMessage('Thanks for message. I will improve later!')
 

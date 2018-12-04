@@ -5,7 +5,8 @@ import ssl
 import telegram_send
 import time
 from threading import Thread
-
+import os
+PATH = os.getcwd()
 
 def run_fetcher():
     print('> DEBUG: Updating soup...')
@@ -62,14 +63,15 @@ def find_waiting_list(soup, name=None):
     return status, position, total_number
 
 def run_spy(name, debug=False, interval=30, init=3):
+
     try:
         print('> DEBUG: Hello! %s' % name)
         print('> DEBUG: Auto bot start running...')
         if not debug:
             telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name],
-                               conf='./config/telegram-send-xun.conf')
+                               conf=os.path.join(PATH, 'EMTA/config/telegram-send-xun.conf'))
             telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name],
-                               conf='./config/telegram-send-shan.conf')
+                               conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
 
         # init
         wait_position = -1
@@ -101,9 +103,9 @@ def run_spy(name, debug=False, interval=30, init=3):
 
                 if send_wait and not debug:
                     telegram_send.send(messages=['You are in the waiting queue: %d/%d' % (position, num)],
-                                       conf='./config/telegram-send-xun.conf')
+                                       conf=os.path.join(PATH, 'EMTA/config/telegram-send-xun.conf'))
                     telegram_send.send(messages=['You are in the waiting queue: %d/%d' % (position, num)],
-                                       conf='./config/telegram-send-shan.conf')
+                                       conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
                     send_wait = False
 
             elif status == 1:
@@ -114,9 +116,9 @@ def run_spy(name, debug=False, interval=30, init=3):
 
                 if send_call and not debug:
                     telegram_send.send(messages=['You can go to pick up your key now!', 'position: %d.' % position],
-                                       conf='./config/telegram-send-xun.conf')
+                                       conf=os.path.join(PATH, 'EMTA/config/telegram-send-xun.conf'))
                     telegram_send.send(messages=['You can go to pick up your key now!', 'position: %d.' % position],
-                                       conf='./config/telegram-send-shan.conf')
+                                       conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
                     send_call = False
 
             time.sleep(interval)
@@ -124,9 +126,9 @@ def run_spy(name, debug=False, interval=30, init=3):
         print('> DEBUG: bye:)')
         if not debug:
             telegram_send.send(messages=['Bot has been shut down. Bye:)'],
-                               conf='./config/telegram-send-xun.conf')
+                               conf=os.path.join(PATH, 'EMTA/config/telegram-send-xun.conf'))
             telegram_send.send(messages=['Bot has been shut down. Bye:)'],
-                               conf='./config/telegram-send-shan.conf')
+                               conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
     return
 
 class ClassRoom_Bot():

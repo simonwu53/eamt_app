@@ -6,3 +6,4 @@ life_utils
 * ipython
 * virtualenv
 * telepot
+* lxml

@@ -1,5 +1,7 @@
+import os
+PATH = os.getcwd()
 import sys
-sys.path.insert(0, '/Users/simonwu/PycharmProjects/life_utils/EMTA')
+sys.path.insert(0, os.path.join(PATH,'EMTA/'))
 import check_room
 
 import telepot
@@ -12,7 +14,7 @@ import logging
 # with open(fname, 'w') as f:
 #     f.write('-----begining of the log------')
 # logging.basicConfig(filename=fname, filemode='w', format='%(asctime)s - %(levelname)s:  %(message)s', level=logging.DEBUG)
-logging.basicConfig(format='%(asctime)s - %(levelname)s:  %(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(levelname)s:  %(message)s', level=logging.WARN)
 
 
 class TG_Bot_Server():
@@ -21,7 +23,7 @@ class TG_Bot_Server():
                                                 [pave_event_space()
                                                  (per_chat_id(), create_open, MessageHandler, timeout=60)])
         MessageLoop(self.__bot).run_as_thread()
-        logging.debug('Bot server has been started.')
+        logging.warning('Bot server has been started.')
         return
 
     def stop_listening(self):
@@ -38,14 +40,14 @@ class MessageHandler(telepot.helper.ChatHandler):
         self._count += 1
 
         content_type, chat_type, chat_id = telepot.glance(msg)
-        logging.debug('Received msg-> content_type: %s, chat_type: %s, chat_id: %d' %
+        logging.warning('Received msg-> content_type: %s, chat_type: %s, chat_id: %d' %
                       (content_type, chat_type, chat_id))
 
         # if received a text message
         if content_type == 'text':
             # if start spy command received
             if msg['text'] == '/startspy':
-                logging.debug('Received a request to start spy. from: %s' % msg['from']['username'])
+                logging.warning('Received a request to start spy. from: %s' % msg['from']['username'])
 
                 self.spy_started = True
                 self.sender.sendMessage('OK, please tell me your name. (the name displayed on the website)')
@@ -54,26 +56,26 @@ class MessageHandler(telepot.helper.ChatHandler):
             if self.spy_started == True:
                 name, status = self.check_name(msg['text'])
                 if status == 1:
-                    logging.debug('Spy run! name: %s, username: %s' % (name, msg['from']['username']))
+                    logging.warning('Spy run! name: %s, username: %s' % (name, msg['from']['username']))
                     check_room.run_spy(name, debug=False)
-                    logging.debug('Spy finished task.')
+                    logging.warning('Spy finished task.')
                     self.spy_started = False
                 elif status == -1:
-                    logging.debug('Name err: bad format.')
+                    logging.warning('Name err: bad format.')
                     self.sender.sendMessage('Format should be: First Last!')
                 elif status == 0:
-                    logging.debug('Name err: bad format.')
+                    logging.warning('Name err: bad format.')
                     self.sender.sendMessage('Last name only use first character!')
                 return
 
             if msg['text'] == '/start':
-                logging.debug('New user registered: %s %s' %
+                logging.warning('New user registered: %s %s' %
                               (msg['from']['first_name'], msg['from']['last_name']))
                 self.sender.sendMessage('Hello, %s %s!' %
                                         (msg['from']['first_name'], msg['from']['last_name']))
                 return
 
-            logging.debug('Received other msg: %s. from: %s' % (msg['text'], msg['from']['username']))
+            logging.warning('Received other msg: %s. from: %s' % (msg['text'], msg['from']['username']))
             self.sender.sendMessage('Thanks for message. I will improve later!')
 
     def check_name(self, name):

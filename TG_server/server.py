@@ -50,7 +50,7 @@ class MessageHandler(telepot.helper.ChatHandler):
                 name, status = self.check_name(msg['text'])
                 if status == 1:
                     logging.debug('Spy run! name: %s, username: %s' % (name, msg['username']))
-                    check_room.run_spy(name, debug=True)
+                    check_room.run_spy(name, debug=False)
                     logging.debug('Spy finished task.')
                     self.spy_started = False
                 elif status == -1:
@@ -60,6 +60,8 @@ class MessageHandler(telepot.helper.ChatHandler):
                     logging.debug('Name err: bad format.')
                     self.sender.sendMessage('Last name only use first character!')
                 return
+
+            self.sender.sendMessage('Thanks for message. I will improve later!')
 
     def check_name(self, name):
         first_last = name.split(' ')

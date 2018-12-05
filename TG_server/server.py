@@ -60,6 +60,7 @@ class MessageHandler(telepot.helper.ChatHandler):
                     check_room.run_spy(name, debug=False)
                     logging.warning('Spy finished task.')
                     self.spy_started = False
+                    self.sender.sendMessage('Application terminated. Bye:)')
                 elif status == -1:
                     logging.warning('Name err: bad format.')
                     self.sender.sendMessage('Format should be: First Last!')

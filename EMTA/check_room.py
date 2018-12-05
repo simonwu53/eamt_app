@@ -33,6 +33,7 @@ def find_waiting_list(soup, name=None):
     status = -1
     position = -1
     count = 0
+    total_number = -1
 
     # get calling list
     for each_name in calling_next[1:]:

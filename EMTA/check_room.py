@@ -5,12 +5,13 @@ import ssl
 import telegram_send
 import time
 from threading import Thread
+import multiprocessing as mp
+import numpy as np
 import os
 PATH = os.getcwd()
 
-def run_fetcher():
+def run_fetcher(url):
     print('> DEBUG: Updating soup...')
-    url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid2.x'
     soup = BeautifulSoup(make_request(url, context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)), features="lxml")
     return soup
 
@@ -84,7 +85,7 @@ def run_spy(name, debug=False, interval=30, init=3):
 
         while True:
             # get html and brew soup
-            soup = run_fetcher()
+            soup = run_fetcher('https://sise.ema.edu.ee/vaatleja/vabadruumid2.x')
             # update queue status
             status, position, num = find_waiting_list(soup, name)
 
@@ -132,42 +133,197 @@ def run_spy(name, debug=False, interval=30, init=3):
                                conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
     return
 
-class ClassRoom_Bot():
-    def __init__(self, name, time_interval=30):
-        self.__name_list = [name]
+
+class Monitor_Bot():
+    def __init__(self, time_interval=30, debug=False):
+        """
+        a bot monitoring the queue system.
+
+        :param time_interval: update time interval
+        """
         self.__time_interval = time_interval
-        self.__records = {}  # time: status
+        self.__debug = debug
+
+        self.__queue_list = np.full(200, -1, dtype=np.dtype([('name', 'U32'),
+                                                             ('status', np.int8),
+                                                             ('position', np.int16),
+                                                             ('origin', np.int16),
+                                                             ('start_ts', np.float64),
+                                                             ('end_ts', np.float64),
+                                                             ('processed', np.int8)]))
+        self.__reservations = {}
+        self.__available_rooms = np.full(50, -1, dtype=np.dtype([('room_id', 'U8'),
+                                                                 ('name', 'U32')]))
+        self.__total_waiting = 0
+        self.practice_room = None
+
+        self.study_material = []
+
         self.__threads = {}
-        self.__soup = None
-        self.__url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid2.x'
+        self.__soup_1 = None
+        self.__soup_2 = None
+        self.__task = mp.Queue()
+        self.__queue_url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid2.x'
+        self.__room_url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid.x'
         self.__terminate = False
 
-        # init user promt
-        p_usr = Thread(target=self.usr_interface)
-        self.__threads['usr_prompt'] = p_usr
-        p_usr.start()
-        # init soup brewer
-        brewer = Thread(target=self.soup_brewer)
-        self.__threads['soup_brewer'] = brewer
-        brewer.start()
+        if not self.__debug:
+            # init soup brewer
+            brewer = Thread(target=self.soup_brewer)
+            self.__threads['soup_brewer'] = brewer
+            brewer.start()
+            # init server
+            server = Thread(target=self.run_server)
+            self.__threads['server'] = server
+            server.start()
         return
 
     def run_server(self):
+        server = Thread(target=self.web_job)
+        self.__threads['server'] = server
+        server.start()
         return
 
-    def init_server(self):
+    def web_job(self):
+        print('Server started.')
+        while True:
+            order = self.__task.get()
+
+            print('Updating information...')
+
+            # init lists
+            self.reset_vaba_room_reservation()
+
+            if order == 'job':
+                soup_1 = self.__soup_1
+                soup_2 = self.__soup_2
+
+                waiting_list = soup_1.find_all(text='JÄRJEKORRAS')[0].find_all_next(text=True)
+                calling_list = soup_1.find_all(text='OODATUD VALVELAUDA')[0].find_all_next(text=True)
+                raw_free_classes = soup_1.find_all(text='VABANEVAD KLASSID:')[0].find_all_next(text=True)
+
+                # init variables
+                count = 0
+                self.__queue_list['processed'] = 0
+
+                # get waiting list
+                new_idx = np.where(self.__queue_list['name']=='-1')[0]
+                pivot = 0
+                for person in waiting_list:
+                    if 'inimest' in person:
+                        self.__total_waiting = int(person[:2])
+                        count = 0
+                        break
+                    else:
+                        count += 1
+                        if person in self.__queue_list['name']:
+                            idx = np.where(self.__queue_list['name']==person)[0][0]
+
+                            self.__queue_list[idx]['position'] = count
+                            self.__queue_list[idx]['processed'] = 1
+                        else:
+                            self.__queue_list[new_idx[pivot]] = (person, 0, count, count, time.time(), -1, 1)
+                            pivot += 1
+
+                # get calling list
+                for person in calling_list:
+                    if person == '\n':
+                        count = 0
+                        break
+                    else:
+                        count += 1
+                        if person in self.__queue_list['name']:
+                            idx = np.where(self.__queue_list['name'] == person)[0][0]
+                            if self.__queue_list[idx]['end_ts'] == -1:
+                                self.__queue_list[idx]['end_ts'] = time.time()
+                                # add study material
+                                self.study_material.append((self.__queue_list[idx]['origin'],
+                                                            self.__queue_list[idx]['start_ts'],
+                                                            self.__queue_list[idx]['end_ts']
+                                                            ))
+
+                            self.__queue_list[idx]['status'] = 1
+                            self.__queue_list[idx]['processed'] = 1
+                            self.__queue_list[idx]['position'] = count
+                        else:
+                            self.__queue_list[new_idx[pivot]] = (person, 1, count, count, -1, time.time(), 1)
+                            pivot += 1
+
+                # clean up vanished names
+                idx_dump =np.where((self.__queue_list['name']!='-1')*(self.__queue_list['processed']==0))
+                self.__queue_list[idx_dump] = -1
+
+                # get room list
+                free_classes = []
+                cache = []
+                for item in raw_free_classes:
+                    if item == '\xa0':
+                        free_classes.append(cache)
+                        cache = []
+                        continue
+                    else:
+                        cache.append(item)
+                free_classes = free_classes[1:]
+
+                for room_info in free_classes:
+                    room_id = room_info[0]
+                    status = room_info[1]
+                    name = room_info[2]
+
+                    # add available rooms
+                    if status == 'vaba':
+                        self.__available_rooms[room_id] = name
+                    # update reservations
+                    if len(room_info) > 3:
+                        reservations = room_info[3:]
+                        self.__reservations[room_id] = reservations
+
+                # soup 2
+                all_rooms = []
+                cache = []
+                for item in soup_2.find_all('td'):
+                    if item.text == '\xa0':
+                        all_rooms.append(cache)
+                        cache = []
+                        continue
+                    else:
+                        cache.append(item.text)
+                all_rooms = all_rooms[1:]
+                self.practice_room = np.zeros(len(all_rooms), dtype=np.dtype([('room_id', 'U4'),
+                                                                              ('remaining', 'U5'),
+                                                                              ('name', 'U32')]))
+                for i in range(self.practice_room.shape[0]):
+                    self.practice_room[i] = tuple(all_rooms[i])
+
+            elif order == 'stop':
+                print('Terminate server!')
+                break
+            else:
+                print('Unknown task type. ', order)
+
+            if self.__debug:
+                print('name list: ')
+                print(self.__queue_list[self.__queue_list['name']!='-1'])
+                print('available rooms: ')
+                print(self.__available_rooms)
+                print('reservations: ')
+                print(self.__reservations)
+                print('all queue size: ')
+                print(self.__total_waiting)
+                print('all practice rooms: ')
+                print(self.practice_room)
+                print('debug mode is on, auto terminated.')
+                break
+            else:
+                print('get name list: ', self.__queue_list[self.__queue_list['name']!='-1']['name'])
+                print('total size of waiting line: ', self.__total_waiting)
         return
 
-    def init_spy(self):
-        return
-
-    def terminate_thread(self, t_name):
-        p = self.__threads[t_name]
-        # send sigkill
-        return
-
-    def spy_worker(self):
-
+    def reset_vaba_room_reservation(self):
+        self.__reservations = {}
+        self.__available_rooms = {}
+        self.__total_waiting = 0
+        self.practice_room = None
         return
 
     def soup_brewer(self):
@@ -175,13 +331,22 @@ class ClassRoom_Bot():
         while True:
             if self.__terminate:
                 print('Terminating brewer...')
+                self.__task.put('stop')
                 break
-            self.__soup = run_fetcher()
+            print('Brewer updated.')
+            self.__soup_1 = run_fetcher(self.__queue_url)
+            self.__soup_2 = run_fetcher(self.__room_url)
+            self.__task.put('job')
             time.sleep(self.__time_interval)
         print('Brewer stopped.')
         return
 
-    def usr_interface(self):
+    def terminate_thread(self, t_name):
+        p = self.__threads[t_name]
+        # send sigkill
+        return
+
+    def on_quit(self):
         return
 
     # functions to control the bot
@@ -192,6 +357,10 @@ class ClassRoom_Bot():
         for t in self.__threads:
             print('Waiting thread %s to stop.' % t)
             self.__threads[t].join()
+
+        # saving states
+        print('Saving states...')
+        self.on_quit()
         print('Bye.')
         return
 
@@ -201,17 +370,14 @@ class ClassRoom_Bot():
         return
 
     def get_soup(self):
-        return self.__soup
+        return self.__soup_1, self.__soup_2
 
-    def add_name(self, name):
-        if type(name) == type(str):
-            self.__name_list.append(name)
-            print('Your name: %s added.' % name)
-        else:
-            print('Please input a valid name!')
+    def feed_soup(self, soup1=None, soup2=None):
+        self.__soup_1 = soup1
+        self.__soup_2 = soup2
+        self.__task.put('job')
         return
 
 
 if __name__ == '__main__':
-    url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid2.x'
-    soup = BeautifulSoup(make_request(url, context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)))
+    pass

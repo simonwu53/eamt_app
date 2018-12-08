@@ -152,12 +152,11 @@ class Monitor_Bot():
                                                              ('end_ts', np.float64),
                                                              ('processed', np.int8)]))
         self.__reservations = {}
-        self.__available_rooms = np.full(50, -1, dtype=np.dtype([('room_id', 'U8'),
-                                                                 ('name', 'U32')]))
+        self.__available_rooms = {}
         self.__total_waiting = 0
-        self.practice_room = None
+        self.__practice_room = None
 
-        self.study_material = []
+        self.__study_material = []
 
         self.__threads = {}
         self.__soup_1 = None
@@ -237,10 +236,10 @@ class Monitor_Bot():
                             if self.__queue_list[idx]['end_ts'] == -1:
                                 self.__queue_list[idx]['end_ts'] = time.time()
                                 # add study material
-                                self.study_material.append((self.__queue_list[idx]['origin'],
-                                                            self.__queue_list[idx]['start_ts'],
-                                                            self.__queue_list[idx]['end_ts']
-                                                            ))
+                                self.__study_material.append((self.__queue_list[idx]['origin'],
+                                                              self.__queue_list[idx]['start_ts'],
+                                                              self.__queue_list[idx]['end_ts']
+                                                              ))
 
                             self.__queue_list[idx]['status'] = 1
                             self.__queue_list[idx]['processed'] = 1
@@ -289,11 +288,11 @@ class Monitor_Bot():
                     else:
                         cache.append(item.text)
                 all_rooms = all_rooms[1:]
-                self.practice_room = np.zeros(len(all_rooms), dtype=np.dtype([('room_id', 'U4'),
-                                                                              ('remaining', 'U5'),
-                                                                              ('name', 'U32')]))
-                for i in range(self.practice_room.shape[0]):
-                    self.practice_room[i] = tuple(all_rooms[i])
+                self.__practice_room = np.zeros(len(all_rooms), dtype=np.dtype([('room_id', 'U4'),
+                                                                                ('remaining', 'U5'),
+                                                                                ('name', 'U32')]))
+                for i in range(self.__practice_room.shape[0]):
+                    self.__practice_room[i] = tuple(all_rooms[i])
 
             elif order == 'stop':
                 print('Terminate server!')
@@ -311,7 +310,7 @@ class Monitor_Bot():
                 print('all queue size: ')
                 print(self.__total_waiting)
                 print('all practice rooms: ')
-                print(self.practice_room)
+                print(self.__practice_room)
                 print('debug mode is on, auto terminated.')
                 break
             else:
@@ -323,7 +322,7 @@ class Monitor_Bot():
         self.__reservations = {}
         self.__available_rooms = {}
         self.__total_waiting = 0
-        self.practice_room = None
+        self.__practice_room = None
         return
 
     def soup_brewer(self):
@@ -341,12 +340,9 @@ class Monitor_Bot():
         print('Brewer stopped.')
         return
 
-    def terminate_thread(self, t_name):
-        p = self.__threads[t_name]
-        # send sigkill
-        return
-
     def on_quit(self):
+        # saving study materials
+
         return
 
     # functions to control the bot
@@ -378,6 +374,48 @@ class Monitor_Bot():
         self.__task.put('job')
         return
 
+    # querying
+    def search_queue(self, name=None):
+        if type(name) != type(None):
+            query = self.__queue_list[self.__queue_list['name'] == name]
+        else:
+            return self.__queue_list[self.__queue_list['name']!='-1']
+
+        if query.size != 0:
+            return query
+        else:
+            return 0
+
+    def get_empty_rooms(self):
+        return self.__available_rooms
+
+    def get_queue_size(self):
+        return self.__total_waiting
+
+    def search_rooms(self, name=None, room_id=None):
+        if type(name) != type(None):
+            query = self.__practice_room[self.__practice_room['name']==name]
+        elif type(room_id) != type(None):
+            query = self.__practice_room[self.__practice_room['room_id'] == room_id]
+        else:
+            return self.__practice_room
+
+        if query.size != 0:
+            return query
+        else:
+            return 0
+
+    def check_reservations(self, room_id=None):
+        if type(room_id) != type(None):
+            if room_id in self.__reservations:
+                return self.__reservations[room_id]
+            else:
+                return 0
+        else:
+            return self.__reservations
+
+    def get_estimation_time(self):
+        return 
 
 if __name__ == '__main__':
     pass

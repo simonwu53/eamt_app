@@ -134,15 +134,15 @@ def run_spy(name, debug=False, interval=30, init=3):
     return
 
 
-class Monitor_Bot():
+class MonitorBot:
     def __init__(self, time_interval=30, debug=False):
         """
         a bot monitoring the queue system.
 
         :param time_interval: update time interval
         """
-        self.__time_interval = time_interval
-        self.__debug = debug
+        self.time_interval = time_interval
+        self.debug = debug
 
         self.__queue_list = np.full(200, -1, dtype=np.dtype([('name', 'U32'),
                                                              ('status', np.int8),
@@ -166,11 +166,7 @@ class Monitor_Bot():
         self.__room_url = 'https://sise.ema.edu.ee/vaatleja/vabadruumid.x'
         self.__terminate = False
 
-        if not self.__debug:
-            # init soup brewer
-            brewer = Thread(target=self.soup_brewer)
-            self.__threads['soup_brewer'] = brewer
-            brewer.start()
+        if not self.debug:
             # init server
             server = Thread(target=self.run_server)
             self.__threads['server'] = server
@@ -178,13 +174,16 @@ class Monitor_Bot():
         return
 
     def run_server(self):
+        brewer = Thread(target=self.soup_brewer)
+        self.__threads['soup_brewer'] = brewer
+        brewer.start()
         server = Thread(target=self.web_job)
         self.__threads['server'] = server
         server.start()
         return
 
     def web_job(self):
-        print('Server started.')
+        print('> DEBUG: Server started.')
         while True:
             order = self.__task.get()
 
@@ -300,7 +299,7 @@ class Monitor_Bot():
             else:
                 print('> ERROR: Unknown task type. ', order)
 
-            if self.__debug:
+            if self.debug:
                 print('name list: ')
                 print(self.__queue_list[self.__queue_list['name']!='-1'])
                 print('available rooms: ')
@@ -325,7 +324,7 @@ class Monitor_Bot():
         return
 
     def soup_brewer(self):
-        print('Brewer started.')
+        print('> DEBUG: Brewer started.')
         while True:
             if self.__terminate:
                 print('Terminating brewer...')
@@ -334,7 +333,7 @@ class Monitor_Bot():
             self.__soup_1 = run_fetcher(self.__queue_url)
             self.__soup_2 = run_fetcher(self.__room_url)
             self.__task.put('job')
-            time.sleep(self.__time_interval)
+            time.sleep(self.time_interval)
         print('Brewer stopped.')
         return
 
@@ -361,7 +360,7 @@ class Monitor_Bot():
     def show_threads(self):
         print('Working threads: ')
         print(self.__threads.keys())
-        return
+        return self.__threads
 
     def get_soup(self):
         return self.__soup_1, self.__soup_2
@@ -372,6 +371,9 @@ class Monitor_Bot():
         self.__task.put('job')
         return
 
+    def get_study_material(self):
+        return self.__study_material
+
     # querying
     def search_queue(self, name=None):
         if type(name) != type(None):
@@ -379,10 +381,7 @@ class Monitor_Bot():
         else:
             return self.__queue_list[self.__queue_list['name']!='-1']
 
-        if query.size != 0:
-            return query
-        else:
-            return 0
+        return query
 
     def get_empty_rooms(self):
         return self.__available_rooms
@@ -398,10 +397,7 @@ class Monitor_Bot():
         else:
             return self.__practice_room
 
-        if query.size != 0:
-            return query
-        else:
-            return 0
+        return query
 
     def check_reservations(self, room_id=None):
         if type(room_id) != type(None):

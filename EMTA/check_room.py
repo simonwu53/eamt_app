@@ -11,7 +11,7 @@ import os
 PATH = os.getcwd()
 
 def run_fetcher(url):
-    print('> DEBUG: Updating soup...')
+    print('> DEBUG: Updating soup from: ', url)
     soup = BeautifulSoup(make_request(url, context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)), features="lxml")
     return soup
 
@@ -188,7 +188,7 @@ class Monitor_Bot():
         while True:
             order = self.__task.get()
 
-            print('Updating information...')
+            print('> DEBUG: Updating information...')
 
             # init lists
             self.reset_vaba_room_reservation()
@@ -295,10 +295,10 @@ class Monitor_Bot():
                     self.__practice_room[i] = tuple(all_rooms[i])
 
             elif order == 'stop':
-                print('Terminate server!')
+                print('> DEBUG: Terminate server!')
                 break
             else:
-                print('Unknown task type. ', order)
+                print('> ERROR: Unknown task type. ', order)
 
             if self.__debug:
                 print('name list: ')
@@ -314,8 +314,7 @@ class Monitor_Bot():
                 print('debug mode is on, auto terminated.')
                 break
             else:
-                print('get name list: ', self.__queue_list[self.__queue_list['name']!='-1']['name'])
-                print('total size of waiting line: ', self.__total_waiting)
+                print('> DEBUG: Information updated.')
         return
 
     def reset_vaba_room_reservation(self):
@@ -332,7 +331,6 @@ class Monitor_Bot():
                 print('Terminating brewer...')
                 self.__task.put('stop')
                 break
-            print('Brewer updated.')
             self.__soup_1 = run_fetcher(self.__queue_url)
             self.__soup_2 = run_fetcher(self.__room_url)
             self.__task.put('job')
@@ -347,15 +345,15 @@ class Monitor_Bot():
 
     # functions to control the bot
     def terminate_bot(self):
-        print('Terminating the bot...')
+        print('> DEBUG: Terminating the bot...')
         self.__terminate = True
 
         for t in self.__threads:
-            print('Waiting thread %s to stop.' % t)
+            print('> DEBUG: Waiting thread %s to stop.' % t)
             self.__threads[t].join()
 
         # saving states
-        print('Saving states...')
+        print('> DEBUG: Saving states...')
         self.on_quit()
         print('Bye.')
         return

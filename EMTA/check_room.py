@@ -154,7 +154,7 @@ class MonitorBot:
         self.__reservations = {}
         self.__available_rooms = {}
         self.__total_waiting = 0
-        self.__practice_room = None
+        self.__practice_room = []
 
         self.__study_material = []
 
@@ -167,19 +167,25 @@ class MonitorBot:
         self.__terminate = False
 
         if not self.debug:
-            # init server
-            server = Thread(target=self.run_server)
+            # init run
+            brewer = Thread(target=self.soup_brewer)
+            self.__threads['soup_brewer'] = brewer
+            brewer.start()
+            server = Thread(target=self.web_job)
             self.__threads['server'] = server
             server.start()
         return
 
     def run_server(self):
-        brewer = Thread(target=self.soup_brewer)
-        self.__threads['soup_brewer'] = brewer
-        brewer.start()
         server = Thread(target=self.web_job)
         self.__threads['server'] = server
         server.start()
+        return
+
+    def run_brewer(self):
+        brewer = Thread(target=self.soup_brewer)
+        self.__threads['soup_brewer'] = brewer
+        brewer.start()
         return
 
     def web_job(self):
@@ -320,7 +326,7 @@ class MonitorBot:
         self.__reservations = {}
         self.__available_rooms = {}
         self.__total_waiting = 0
-        self.__practice_room = None
+        self.__practice_room = []
         return
 
     def soup_brewer(self):
@@ -339,7 +345,11 @@ class MonitorBot:
 
     def on_quit(self):
         # saving study materials
-
+        print('> DEBUG: saving materials...')
+        study = np.array(self.__study_material)
+        fname = time.strftime("%Y-%M-%d-%H-%M", time.localtime(time.time()))+'.npz'
+        np.savez_compressed(os.path.join('./data/', fname), data=study)
+        print('> DEBUG: all saved.')
         return
 
     # functions to control the bot

@@ -203,8 +203,9 @@ class TelegramBot:
 
     def __check_queue_size(self, chat_id):
         number = self.__monitor.get_queue_size()
-        namelist = self.__monitor.search_queue()['name']
-        str_namelist = '%s' % ', '.join(namelist)
+        namelist = self.__monitor.search_queue()
+        namelist = namelist[namelist['status']==0]['name']
+        str_namelist = '%s' % '\n'.join(namelist)
         self.__tgbot.sendMessage(chat_id,
                                  'There are %d people in the waiting queue.\n'
                                  'Estimation function will come later.' % number)

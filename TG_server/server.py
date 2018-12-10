@@ -210,7 +210,7 @@ class TelegramBot:
                                  'There are %d people in the waiting queue.\n'
                                  'Estimation function will come later.' % number)
         self.__tgbot.sendMessage(chat_id,
-                                 'Name list in the queue: ' + str_namelist)
+                                 'Name list in the queue: \n' + str_namelist)
         return
 
     def __search_rooms(self, chat_id, msg):

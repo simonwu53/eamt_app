@@ -11,7 +11,7 @@ import os
 PATH = os.getcwd()
 
 def run_fetcher(url):
-    print('> DEBUG: Updating soup from: ', url)
+    # print('> DEBUG: Updating soup from: ', url)
     soup = BeautifulSoup(make_request(url, context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)), features="lxml")
     return soup
 
@@ -193,7 +193,7 @@ class MonitorBot:
         while True:
             order = self.__task.get()
 
-            print('> DEBUG: Updating information...')
+            # print('> DEBUG: Updating information...')
 
             # init lists
             self.reset_vaba_room_reservation()

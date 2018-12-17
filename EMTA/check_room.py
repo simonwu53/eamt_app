@@ -352,6 +352,7 @@ class MonitorBot:
         study = np.array(self.__study_material)
         fname = time.strftime("%Y-%M-%d-%H-%M", time.localtime(time.time()))+'.npz'
         np.savez_compressed(os.path.join('./data/', fname), data=study)
+        self.__study_material = []
         print('> DEBUG: all saved.')
         return
 
@@ -386,6 +387,10 @@ class MonitorBot:
 
     def get_study_material(self):
         return self.__study_material
+
+    def empty_study_material(self):
+        self.__study_material = []
+        return 
 
     # querying
     def search_queue(self, name=None):

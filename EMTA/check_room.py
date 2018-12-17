@@ -339,8 +339,8 @@ class MonitorBot:
                 break
             # self.__soup_1 = run_fetcher(self.__queue_url)
             # self.__soup_2 = run_fetcher(self.__room_url)
-            self.__soup_1 = BeautifulSoup(requests.get(self.__queue_url, verify=False).text)
-            self.__soup_2 = BeautifulSoup(requests.get(self.__room_url, verify=False).text)
+            self.__soup_1 = BeautifulSoup(requests.get(self.__queue_url, verify=False).text, features="lxml")
+            self.__soup_2 = BeautifulSoup(requests.get(self.__room_url, verify=False).text, features="lxml")
             self.__task.put('job')
             time.sleep(self.time_interval)
         print('Brewer stopped.')

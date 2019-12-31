@@ -61,8 +61,10 @@ target/
 
 \.idea/
 
-EMTA/config/
+EAMTapp/config/
 
-TG_server/tutorials/
+EAMTapp/tutorials/
 
 data/
+
+EAMTapp/eamt_app.db

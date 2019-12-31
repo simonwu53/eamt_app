@@ -60,7 +60,7 @@ str_query_tables = "SELECT name FROM sqlite_master WHERE type='table'"
 
 
 class Bot:
-    def __init__(self, token, start_monitor=True, start_webdriver=True, interval=10):
+    def __init__(self, token, room_monitor=True, start_webdriver=True, interval=10):
         # protected variables
         self.__token = token
         self.__tgbot = None
@@ -88,7 +88,7 @@ class Bot:
         MessageLoop(self.__tgbot, self.__msg_handler).run_as_thread()
         LOG.info('TG Bot has started.')
 
-        if start_monitor:
+        if room_monitor:
             self.rooms_monitor(interval=interval)
         if start_webdriver:
             self.__browser = WebBrowser()
@@ -304,7 +304,7 @@ class Bot:
                     LOG.error(err)
 
             # CASE 2: update profile
-            if msg['text'].startswith('/updateprofile'):
+            elif msg['text'].startswith('/updateprofile'):
                 sender = msg['from']
                 msg_split = msg['text'].split(' ')
 
@@ -338,68 +338,90 @@ class Bot:
                     LOG.error(err)
 
             # CASE 3: check queue
-            if msg['text'].startswith('/rooms'):
-                cur.execute('SELECT room, status, holder FROM rooms')
-                rooms = cur.fetchall()
-                if not rooms:
-                    _ = self.__send_msg(chat_id, 'No room is in use currently.')
+            elif msg['text'].startswith('/rooms'):
+                if not self.__is_running:
+                    _ = self.__send_msg(chat_id, 'Room monitor is not running. Can not perform request.')
+                    LOG.error('Rooms are queried while monitor not running.')
+
                 else:
-                    # format the feedback
-                    formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in rooms]
-                    room_num, status, holder = "Room", "Time", "Name"
-                    msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
-                    _ = self.__send_msg(chat_id, msg)
+                    cur.execute('SELECT room, status, holder FROM rooms')
+                    rooms = cur.fetchall()
+                    if not rooms:
+                        _ = self.__send_msg(chat_id, 'No room is in use currently.')
+                    else:
+                        # format the feedback
+                        formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in rooms]
+                        room_num, status, holder = "Room", "Time", "Name"
+                        msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
+                        _ = self.__send_msg(chat_id, msg)
 
             # CASE 4: get daily menu
-            if msg['text'].startswith('/dailymeal'):
-                msg = self.__send_msg(chat_id, 'Fetching menu, please wait...')
-                menu = self.__browser.get_dailymeal()
+            elif msg['text'].startswith('/dailymeal'):
+                if self.__browser is None:
+                    _ = self.__send_msg(chat_id, 'Web driver is not running. Can not perform request.')
+                    LOG.error('JS Web requested while web driver not running.')
 
-                if menu is not None:
-                    _ = self.__update_msg(chat_id, msg['message_id'], menu)
                 else:
-                    _ = self.__update_msg(chat_id, msg['message_id'], 'Can not fetch menu!')
-                    LOG.warning('No daily meal menu fetched!')
+                    msg = self.__send_msg(chat_id, 'Fetching menu, please wait...')
+                    menu = self.__browser.get_dailymeal()
 
-            # CASE 5:
-            if msg['text'].startswith('/searchroombyname'):
-                # remove header
-                msg = msg[18:]
-                res = self.__get_room(cur=cur, full_name=msg)
-                if res is None:
-                    _ = self.__send_msg(chat_id, "No result. (Could not find)")
-                    LOG.info('Room not found.')
+                    if menu is not None:
+                        _ = self.__update_msg(chat_id, msg['message_id'], menu)
+                    else:
+                        _ = self.__update_msg(chat_id, msg['message_id'], 'Can not fetch menu! Please try again later!')
+                        LOG.warning('No daily meal menu fetched!')
+
+            # CASE 5: search room by name
+            elif msg['text'].startswith('/searchroombyname'):
+                if len(msg['text'].split(' ')) == 1:
+                    LOG.error('Querying room without input a name!')
+                    _ = self.__send_msg(chat_id,
+                                        "Error. You should input full name after command, using spaces as separators.")
+
                 else:
-                    # format the feedback
-                    formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in res]
-                    room_num, status, holder = "Room", "Time", "Name"
-                    msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
-                    _ = self.__send_msg(chat_id, msg)
-                    LOG.info('Room found. %s' % formatted_result[0])
+                    # remove header
+                    msg = msg[18:]
+                    res = self.__get_room(cur=cur, full_name=msg)
+                    if res is None:
+                        _ = self.__send_msg(chat_id, "No result. (Could not find)")
+                        LOG.info('Room not found.')
+                    else:
+                        # format the feedback
+                        formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in res]
+                        room_num, status, holder = "Room", "Time", "Name"
+                        msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
+                        _ = self.__send_msg(chat_id, msg)
+                        LOG.info('Room found. %s' % formatted_result[0])
 
-            # CASE 6:
-            if msg['text'].startswith('/searchroombyid'):
-                # remove header
-                msg = msg[16:]
-                res = self.__get_room(cur=cur, room_num=msg)
-                if res is None:
-                    _ = self.__send_msg(chat_id, "No result. (Could not find)")
-                    LOG.info('Room not found.')
+            # CASE 6: search room by id
+            elif msg['text'].startswith('/searchroombyid'):
+                if len(msg['text'].split(' ')) == 1:
+                    LOG.error('Querying room without input room id!')
+                    _ = self.__send_msg(chat_id,
+                                        "Error. You should input room id after command, using spaces as separators.")
+
                 else:
-                    # format the feedback
-                    formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in res]
-                    room_num, status, holder = "Room", "Time", "Name"
-                    msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
-                    _ = self.__send_msg(chat_id, msg)
-                    LOG.info('Room found. %s' % formatted_result[0])
+                    # remove header
+                    msg = msg[16:]
+                    res = self.__get_room(cur=cur, room_num=msg)
+                    if res is None:
+                        _ = self.__send_msg(chat_id, "No result. (Could not find)")
+                        LOG.info('Room not found.')
+                    else:
+                        # format the feedback
+                        formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in res]
+                        room_num, status, holder = "Room", "Time", "Name"
+                        msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
+                        _ = self.__send_msg(chat_id, msg)
+                        LOG.info('Room found. %s' % formatted_result[0])
 
-            # CASE 7:
-            if msg['text'].startswith('/reservations'):
-                _ = self.__send_msg(chat_id, 'Not implemented. Unknown command.')
+            # CASE 7: reservations
+            elif msg['text'].startswith('/reservations'):
+                _ = self.__send_msg(chat_id, 'Not implemented. Unknown command. 1')
 
             # CASES NOT COVERED
             else:
-                _ = self.__send_msg(chat_id, 'Not implemented. Unknown command.')
+                _ = self.__send_msg(chat_id, 'Not implemented. Unknown command. 2')
 
         # all other message types will be ignored
         else:

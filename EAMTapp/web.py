@@ -93,6 +93,11 @@ class WebBrowser:
             # make sure there's no empty string in menu
             menu = list(filter(None, menu))
 
+            # check if there is daily menu today
+            if len(menu) == 1:
+                LOG.warning('No daily meal today.')
+                return None
+
             # title and date of the menu
             title = menu[0] + '\n' + menu[1] + '\n'
 

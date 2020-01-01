@@ -3,7 +3,9 @@ from telepot.loop import MessageLoop
 import sqlite3
 import sys
 import logging
-import time
+from time import sleep
+from datetime import datetime, time
+import pytz
 from threading import Thread
 from web import get_rooms, WebBrowser
 
@@ -60,13 +62,17 @@ str_query_tables = "SELECT name FROM sqlite_master WHERE type='table'"
 
 
 class Bot:
-    def __init__(self, token, room_monitor=True, start_webdriver=True, interval=10):
+    def __init__(self, token, room_monitor=True, start_webdriver=True, interval=30,
+                 monitor_night_pause=(22, 8), monitor_time_zone='Europe/Tallinn'):
         # protected variables
         self.__token = token
         self.__tgbot = None
         self.__is_running = True
         self.__threads = {}
         self.__browser = None
+        self.__refresh_interval = interval
+        self.__timezone = monitor_time_zone
+        self.__night_hours = monitor_night_pause
 
         # connect to db
         LOG.info('Connecting to database.')
@@ -89,7 +95,8 @@ class Bot:
         LOG.info('TG Bot has started.')
 
         if room_monitor:
-            self.rooms_monitor(interval=interval)
+            self.rooms_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours,
+                               time_zone=self.__timezone)
         if start_webdriver:
             self.__browser = WebBrowser()
         return
@@ -215,11 +222,10 @@ class Bot:
         :param cur: db cursor
         :param rooms: list of rooms information
         """
-        LOG.info('Inserting %d new rooms.' % len(rooms))
         for room in rooms:
             room_num, status, holder = room
             cur.execute(str_insert_room, (room_num, status, holder))
-        LOG.info('All rooms inserted.')
+        LOG.info('Inserted %d new rooms.' % len(rooms))
         return
 
     def __get_room(self, cur=None, full_name=None, room_num=None):
@@ -431,8 +437,9 @@ class Bot:
         con.close()
         return
 
-    def rooms_monitor(self, interval=10):
-        LOG.info('Starting rooms monitor, interval %d.' % interval)
+    def rooms_monitor(self, interval, night_pause, time_zone):
+        night_start, night_end = night_pause
+        LOG.info('Starting rooms monitor, interval %d. Night range (%d:00-%d:00)' % (interval, night_start, night_end))
 
         def task():
             con = self.__db_connect()
@@ -443,6 +450,13 @@ class Bot:
                     con.close()
                     break
 
+                # check current time
+                current_time = datetime.now(pytz.timezone(time_zone)).time()
+                if current_time >= time(night_start, 00) or current_time <= time(night_end, 00):
+                    sleep(interval)
+                    continue
+
+                # fetch rooms info
                 try:
                     # clear rooms table
                     self.__clear_rooms(cur=cur)
@@ -452,7 +466,7 @@ class Bot:
                     # if no room is in use, wait until next refresh
                     if rooms is None:
                         con.commit()
-                        time.sleep(interval)
+                        sleep(interval)
                         continue
 
                     # refresh rooms with new entries
@@ -464,7 +478,7 @@ class Bot:
                     con.rollback()
                     LOG.error(err)
                 # wait until next refresh
-                time.sleep(interval)
+                sleep(interval)
             return
 
         monitor = Thread(target=task)
@@ -495,6 +509,10 @@ class Bot:
         self.__browser.on_stop()
         # close db connection
         self.con.close()
+        # wait until threads terminated
+        LOG.info('Waiting threads to be terminated...')
+        for k in self.__threads:
+            self.__threads[k].join()
         LOG.info('Bye.')
         return
 
@@ -504,6 +522,6 @@ if __name__ == '__main__':
     bot = Bot(TOKEN)
     try:
         while True:
-            time.sleep(10)
+            sleep(10)
     except KeyboardInterrupt as e:
         bot.on_stop()

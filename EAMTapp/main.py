@@ -45,8 +45,7 @@ def main():
               monitor_time_zone=args.timezone, monitor_night_pause=night_hours)
 
     def receiveSignal(signum, frame):
-        LOG.info('Received: %d', signum)
-        LOG.info('Current PID: %d', os.getpid())
+        LOG.info('Received: %d, Current PID: %d' % (signum, os.getpid()))
         bot.on_stop()
         return
 

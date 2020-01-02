@@ -71,8 +71,10 @@ class Bot:
         self.__threads = {}
         self.__browser = None
         self.__refresh_interval = interval
-        self.__timezone = monitor_time_zone
         self.__night_hours = monitor_night_pause
+
+        # params
+        self.timezone = monitor_time_zone
 
         # connect to db
         LOG.info('Connecting to database.')
@@ -95,8 +97,7 @@ class Bot:
         LOG.info('TG Bot has started.')
 
         if room_monitor:
-            self.rooms_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours,
-                               time_zone=self.__timezone)
+            self.rooms_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours)
         if start_webdriver:
             self.__browser = WebBrowser()
         return
@@ -234,7 +235,7 @@ class Bot:
         :param cur: db cursor
         :param full_name: full name want to query
         :param room_num: room number want to query
-        return None or query result list
+        return query result list, could be an empty list
         """
         if cur is None:
             cur = self.cur
@@ -252,10 +253,9 @@ class Bot:
             return cur.fetchall()
 
         LOG.error(f'Invalid room query: name={full_name}, num={room_num}')
-        return None
+        return []
 
     def __clear_rooms(self, cur=None):
-        LOG.info('Clearing table: rooms')
         if cur is None:
             cur = self.cur
 
@@ -343,7 +343,7 @@ class Bot:
                     con.rollback()
                     LOG.error(err)
 
-            # CASE 3: check queue
+            # CASE 3: check rooms
             elif msg['text'].startswith('/rooms'):
                 if not self.__is_running:
                     _ = self.__send_msg(chat_id, 'Room monitor is not running. Can not perform request.')
@@ -386,9 +386,9 @@ class Bot:
 
                 else:
                     # remove header
-                    msg = msg[18:]
+                    msg = msg['text'][18:]
                     res = self.__get_room(cur=cur, full_name=msg)
-                    if res is None:
+                    if not res:
                         _ = self.__send_msg(chat_id, "No result. (Could not find)")
                         LOG.info('Room not found.')
                     else:
@@ -408,9 +408,9 @@ class Bot:
 
                 else:
                     # remove header
-                    msg = msg[16:]
+                    msg = msg['text'][16:]
                     res = self.__get_room(cur=cur, room_num=msg)
-                    if res is None:
+                    if not res:
                         _ = self.__send_msg(chat_id, "No result. (Could not find)")
                         LOG.info('Room not found.')
                     else:
@@ -437,7 +437,7 @@ class Bot:
         con.close()
         return
 
-    def rooms_monitor(self, interval, night_pause, time_zone):
+    def rooms_monitor(self, interval, night_pause):
         night_start, night_end = night_pause
         LOG.info('Starting rooms monitor, interval %d. Night range (%d:00-%d:00)' % (interval, night_start, night_end))
 
@@ -451,7 +451,7 @@ class Bot:
                     break
 
                 # check current time
-                current_time = datetime.now(pytz.timezone(time_zone)).time()
+                current_time = self.tic_tic()
                 if current_time >= time(night_start, 00) or current_time <= time(night_end, 00):
                     sleep(interval)
                     continue
@@ -500,6 +500,10 @@ class Bot:
         msg = self.__tgbot.editMessageText((chat_id, msg_id), text=msg)
         LOG.info('Bot message updated -> (chat_id=%d, text=%s)' % (chat_id, msg))
         return msg
+
+    def tic_tic(self):
+        """Return current time (datetime.time() object)"""
+        return datetime.now(pytz.timezone(self.timezone)).time()
 
     def on_stop(self):
         LOG.info('Terminating TG Bot...')

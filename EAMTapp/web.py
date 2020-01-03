@@ -57,6 +57,7 @@ def get_rooms(soup=None):
             res = re.search('\d+:\d+|\d+', entry)
             if res is None:
                 LOG.error('Can not parse the status of Room: %s' % room_num)
+                continue
             status = entry[:res.end()]
             entry = entry[res.end():]
 

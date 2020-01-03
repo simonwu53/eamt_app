@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 from urllib.request import urlopen
 import requests
 from selenium.webdriver import PhantomJS
@@ -11,6 +12,8 @@ import numpy as np
 import os
 import logging
 import re
+from datetime import datetime, time
+from collections import namedtuple
 
 
 # Set logging
@@ -21,6 +24,8 @@ LOG = logging.getLogger('EAMTapp')
 # fetch urls
 URL_ROOMS = 'https://sise.ema.edu.ee/vaatleja/vabadruumid.x'
 URL_QUEUE = 'https://sise.ema.edu.ee/vaatleja/vabadruumid2.x'
+URL_ROOM_RESERV = 'https://sise.ema.edu.ee/vaatleja/parem2.x?ruum=%s&vaade=week&week=%d&year=%d&mon=%d'
+URL_ROOMS_LIST  = 'https://sise.ema.edu.ee/vaatleja/parem2.x'
 
 
 # independent webcrawl, no driver needed
@@ -63,6 +68,63 @@ def get_rooms(soup=None):
         # assemble list
         rooms_formatted.append((room_num, status, name))
     return rooms_formatted
+
+
+def get_rooms_list(soup=None):
+    if soup is None:
+        # get rooms html from url
+        soup = BeautifulSoup(requests.get(URL_ROOMS_LIST).text, features='lxml')
+
+    # get <select> tag with all rooms as options
+    res = soup.find('select', attrs={'name':'ruum'})
+    # get rooms values
+    rooms_list = list(map(lambda x: x['value'] if isinstance(x, Tag) else '', res.children))
+    # remove empty string
+    rooms_list = list(filter(None, rooms_list))
+    return rooms_list
+
+
+def get_room_reservation(room, week, year, month, soup=None):
+    Reservation = namedtuple('Reservation', ['weekday', 'time_start', 'time_end', 'description'])
+    weekly_reservations = []
+
+    if soup is None:
+        # get rooms html from url
+        soup = BeautifulSoup(requests.get(URL_ROOM_RESERV%(room, week, year, month)).text, features='lxml')
+
+    # all reservations are in the <div> tags
+    divs = soup.find_all('div')
+
+    # sometimes can't get target html
+    if not divs:
+        LOG.error('Could not find any <div> tags in the reservation!')
+        return []
+
+    # each reservation has two <div> tags
+    for div_tag in divs:
+        # only use the one has child tags
+        if not div_tag.contents:
+            continue
+
+        # get weekday
+        left_margin_res = re.search('left:(\d*)px', div_tag['style'])
+        left_margin = int(div_tag['style'][left_margin_res.start()+5:left_margin_res.end()-2])
+        weekday = int((left_margin - 50) / 100) + 1  # value varies from 1 to 7
+
+        # get time/duration
+        duration_res = re.search('\d\d:\d\d-\d\d:\d\d', div_tag.center.text)  # e.g. '13:00-14:00'
+        duration = div_tag.center.text[duration_res.start():duration_res.end()].split('-')  # e.g. ['13:00','14:00']
+        start_hour, start_minute = duration[0].split(':')  # e.g. ['13','00']
+        start_time = time(hour=int(start_hour), minute=int(start_minute))  # datetime.time(13, 0)
+        end_hour, end_minute = duration[1].split(':')  # e.g. ['14','00']
+        end_time = time(hour=int(end_hour), minute=int(end_minute))  # datetime.time(14, 0)
+
+        # get description
+        description = div_tag.center.text[duration_res.end():].strip('\r\n ').replace('\r\n', ' ')
+        weekly_reservations.append(Reservation(weekday, start_time, end_time, description))
+
+    # reorder & return results
+    return sorted(sorted(weekly_reservations, key=lambda x: x.time_start), key=lambda x: x.weekday)
 
 
 class WebBrowser:

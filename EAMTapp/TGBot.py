@@ -7,7 +7,7 @@ from time import sleep
 from datetime import datetime, time
 import pytz
 from threading import Thread
-from web import get_rooms, WebBrowser
+from web import get_rooms, WebBrowser, get_rooms_list, get_room_reservation
 
 
 # Set logging
@@ -75,6 +75,9 @@ class Bot:
 
         # params
         self.timezone = monitor_time_zone
+
+        # need to refresh
+        self.__rooms_list = None
 
         # connect to db
         LOG.info('Connecting to database.')
@@ -275,6 +278,13 @@ class Bot:
         # only process text message currently
         if content_type == 'text':
 
+            # check username
+            if 'username' not in msg['from']:
+                _ = self.__send_msg(chat_id=chat_id,
+                                    msg='Your telegram has not set a username. Set it in your profile.')
+                con.close()
+                return
+
             # CASE 1: new user
             if msg['text'].startswith('/register'):
                 sender = msg['from']
@@ -423,7 +433,44 @@ class Bot:
 
             # CASE 7: reservations
             elif msg['text'].startswith('/reservations'):
-                _ = self.__send_msg(chat_id, 'Not implemented. Unknown command. 1')
+                msg_split = msg['text'].split(' ')
+
+                # check invalid input
+                if len(msg_split) == 1:
+                    LOG.error('Querying reservation without input room id!')
+                    _ = self.__send_msg(chat_id,
+                                        "Error. You should input room id after command, using spaces as separators.")
+
+                # only has room id
+                elif len(msg_split) == 2:
+                    room_id = msg_split[1]
+                    # get all rooms list
+                    if self.__rooms_list is None:
+                        self.__rooms_list = get_rooms_list()
+                    # check if room id valid
+                    if room_id not in self.__rooms_list:
+                        LOG.error('Querying reservation with unknown room id: %s!' % room_id)
+                        _ = self.__send_msg(chat_id, "Error. Unknown room id. It is not in the room list!")
+                    else:
+                        # get current week, month, year
+                        week_num, month, year = self.tic_tic(get_time=False)
+                        res = get_room_reservation(room_id, week_num, year, month)
+                        if not res:
+                            LOG.warning('No reservation found in the querying period.')
+                            _ = self.__send_msg(chat_id, 'No reservation found in the querying period.')
+                        else:
+                            # format the feedback
+                            formatted_result = [f"{day:<7}{start.isoformat(timespec='minutes'):<9}"
+                                                f"{end.isoformat(timespec='minutes'):<9}{dsrp:>10}"
+                                                for day, start, end, dsrp in res]
+                            day, start, end, dsrp = "Day", "Start", "End", "Description"
+                            msg = '\n'.join([f"{day:<7}{start:<9}{end:<9}{dsrp:>10}"] + formatted_result)
+                            _ = self.__send_msg(chat_id, msg)
+                            LOG.info('Queried %d reservations on room %s, week_number %d, month %d, year %d.' %
+                                     (len(res), room_id, week_num, month, year))
+
+                else:
+                    _ = self.__send_msg(chat_id, 'Not implemented. You can access reservation by input room id now.')
 
             # CASES NOT COVERED
             else:
@@ -451,7 +498,7 @@ class Bot:
                     break
 
                 # check current time
-                current_time = self.tic_tic()
+                current_time = self.tic_tic(get_time=True)
                 if current_time >= time(night_start, 00) or current_time <= time(night_end, 00):
                     sleep(interval)
                     continue
@@ -501,9 +548,16 @@ class Bot:
         LOG.info('Bot message updated -> (chat_id=%d, text=%s)' % (chat_id, msg))
         return msg
 
-    def tic_tic(self):
-        """Return current time (datetime.time() object)"""
-        return datetime.now(pytz.timezone(self.timezone)).time()
+    def tic_tic(self, get_time=True):
+        """Return current time (datetime.time() object) OR (week(int), month(int), year(int))"""
+        if get_time:
+            return datetime.now(pytz.timezone(self.timezone)).time()
+        else:
+            # return week(int), month(int), year(int)
+            # NB! school week count from 0
+            now = datetime.now(pytz.timezone(self.timezone))
+            year, week_num, weekday = now.isocalendar()
+            return week_num-1, now.month, year
 
     def on_stop(self):
         LOG.info('Terminating TG Bot...')

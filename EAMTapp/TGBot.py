@@ -63,7 +63,8 @@ str_query_tables = "SELECT name FROM sqlite_master WHERE type='table'"
 
 class Bot:
     def __init__(self, token, room_monitor=True, start_webdriver=True, interval=30,
-                 monitor_night_pause=(22, 8), monitor_time_zone='Europe/Tallinn'):
+                 monitor_night_pause=(22, 8), monitor_time_zone='Europe/Tallinn',
+                 periodic_task=True):
         # protected variables
         self.__token = token
         self.__tgbot = None
@@ -100,9 +101,11 @@ class Bot:
         LOG.info('TG Bot has started.')
 
         if room_monitor:
-            self.rooms_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours)
+            self.room_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours)
         if start_webdriver:
             self.__browser = WebBrowser()
+        if periodic_task:
+            self.periodic_tasks()
         return
 
     def __db_connect(self, path=DB_PAth):
@@ -369,6 +372,7 @@ class Bot:
                         formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in rooms]
                         room_num, status, holder = "Room", "Time", "Name"
                         msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
+                        msg += '\nTotal rooms: %d' % len(rooms)
                         _ = self.__send_msg(chat_id, msg)
 
             # CASE 4: get daily menu
@@ -437,9 +441,15 @@ class Bot:
 
                 # check invalid input
                 if len(msg_split) == 1:
-                    LOG.error('Querying reservation without input room id!')
+                    LOG.warning('Querying reservation without input room id!')
                     _ = self.__send_msg(chat_id,
-                                        "Error. You should input room id after command, using spaces as separators.")
+                                        "[Helper]\n"
+                                        "You should input room id after command, using spaces as separators.\n"
+                                        "e.g. /reservations C405\n"
+                                        "To get reservations for the next week, add week identifier next to room id."
+                                        "(1 means next week, 2 means the week after next week, etc.)\n"
+                                        "e.g. /reservations C405 1"
+                                        )
 
                 # only has room id
                 elif len(msg_split) == 2:
@@ -469,8 +479,47 @@ class Bot:
                             LOG.info('Queried %d reservations on room %s, week_number %d, month %d, year %d.' %
                                      (len(res), room_id, week_num, month, year))
 
+                # room id + week shift
+                elif len(msg_split) == 3:
+                    room_id = msg_split[1]
+                    # check input validity
+                    try:
+                        week_identifier = int(msg_split[2])
+                    except ValueError as e:
+                        LOG.error('Querying reservation with wrong week identifier: %s!' % msg_split[2])
+                        _ = self.__send_msg(chat_id, 'Error. Can not understand week identifier.')
+                        con.close()
+                        return
+                    # check input validity
+                    if self.__rooms_list is None:
+                        self.__rooms_list = get_rooms_list()
+                    if room_id not in self.__rooms_list:
+                        LOG.error('Querying reservation with unknown room id: %s!' % room_id)
+                        _ = self.__send_msg(chat_id, "Error. Unknown room id. It is not in the room list!")
+                        con.close()
+                        return
+
+                    # perform query
+                    # get current week, month, year
+                    week_num, month, year = self.tic_tic(get_time=False)
+                    res = get_room_reservation(room_id, week_num+week_identifier, year, month)
+
+                    if not res:
+                        LOG.warning('No reservation found in the querying period.')
+                        _ = self.__send_msg(chat_id, 'No reservation found in the querying period.')
+                    else:
+                        # format the feedback
+                        formatted_result = [f"{day:<7}{start.isoformat(timespec='minutes'):<9}"
+                                            f"{end.isoformat(timespec='minutes'):<9}{dsrp:>10}"
+                                            for day, start, end, dsrp in res]
+                        day, start, end, dsrp = "Day", "Start", "End", "Description"
+                        msg = '\n'.join([f"{day:<7}{start:<9}{end:<9}{dsrp:>10}"] + formatted_result)
+                        _ = self.__send_msg(chat_id, msg)
+                        LOG.info('Queried %d reservations on room %s, week_number %d, month %d, year %d.' %
+                                 (len(res), room_id, week_num, month, year))
+
                 else:
-                    _ = self.__send_msg(chat_id, 'Not implemented. You can access reservation by input room id now.')
+                    _ = self.__send_msg(chat_id, 'Can not understand command. Type /reservations to get instructions.')
 
             # CASES NOT COVERED
             else:
@@ -484,9 +533,23 @@ class Bot:
         con.close()
         return
 
-    def rooms_monitor(self, interval, night_pause):
+    def __send_msg(self, chat_id, msg):
+        msg = self.__tgbot.sendMessage(chat_id, msg)
+        LOG.info('Bot message sent -> (chat_id=%d, text=%s)' % (chat_id, msg))
+
+        # # other way to send msg use config file
+        # telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name],
+        #                    conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
+        return msg
+
+    def __update_msg(self, chat_id, msg_id, msg):
+        msg = self.__tgbot.editMessageText((chat_id, msg_id), text=msg)
+        LOG.info('Bot message updated -> (chat_id=%d, text=%s)' % (chat_id, msg))
+        return msg
+
+    def room_monitor(self, interval, night_pause):
         night_start, night_end = night_pause
-        LOG.info('Starting rooms monitor, interval %d. Night range (%d:00-%d:00)' % (interval, night_start, night_end))
+        LOG.info('Starting room monitor, interval %d. Night range (%d:00-%d:00)' % (interval, night_start, night_end))
 
         def task():
             con = self.__db_connect()
@@ -495,6 +558,7 @@ class Bot:
             while True:
                 if not self.__is_running:
                     con.close()
+                    LOG.info('Room monitor has stopped')
                     break
 
                 # check current time
@@ -529,24 +593,39 @@ class Bot:
             return
 
         monitor = Thread(target=task)
-        self.__threads['monitor'] = monitor
+        self.__threads['room_monitor'] = monitor
         monitor.start()
-        LOG.info('Monitor has started.')
+        LOG.info('Room monitor has started.')
         return
 
-    def __send_msg(self, chat_id, msg):
-        msg = self.__tgbot.sendMessage(chat_id, msg)
-        LOG.info('Bot message sent -> (chat_id=%d, text=%s)' % (chat_id, msg))
+    def periodic_tasks(self):
+        def task():
+            cc = 1
+            flag = True
+            while True:
+                if not self.__is_running:
+                    LOG.info('Periodic tasks have been stopped.')
+                    break
 
-        # # other way to send msg use config file
-        # telegram_send.send(messages=['Hello, %s. You will be notified when there are updates in the queue.' % name],
-        #                    conf=os.path.join(PATH, 'EMTA/config/telegram-send-shan.conf'))
-        return msg
+                # task 1: check room monitor status
+                if not self.__threads['room_monitor'].isAlive() and cc%10==0:
+                    LOG.warning('[P-task]:Room monitor is stopped. Restarting...')
+                    self.room_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours)
+                    flag = False
 
-    def __update_msg(self, chat_id, msg_id, msg):
-        msg = self.__tgbot.editMessageText((chat_id, msg_id), text=msg)
-        LOG.info('Bot message updated -> (chat_id=%d, text=%s)' % (chat_id, msg))
-        return msg
+                # report
+                if flag:
+                    LOG.info('[P-task]:All tasks working.')
+
+                sleep(60)
+                cc = cc % 6000000000000 + 1
+            return
+
+        periodic_task = Thread(target=task)
+        self.__threads['periodic_task'] = periodic_task
+        periodic_task.start()
+        LOG.info('Periodic tasks have been started.')
+        return
 
     def tic_tic(self, get_time=True):
         """Return current time (datetime.time() object) OR (week(int), month(int), year(int))"""

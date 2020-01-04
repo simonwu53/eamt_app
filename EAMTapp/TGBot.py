@@ -369,9 +369,9 @@ class Bot:
                         _ = self.__send_msg(chat_id, 'No room is in use currently.')
                     else:
                         # format the feedback
-                        formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in rooms]
+                        formatted_result = [f"{room_num:<10}{status:<10}{holder:>5}" for room_num, status, holder in rooms]
                         room_num, status, holder = "Room", "Time", "Name"
-                        msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
+                        msg = '\n'.join([f"{room_num:<10}{status:<10}{holder:>5}"] + formatted_result)
                         msg += '\nTotal rooms: %d' % len(rooms)
                         _ = self.__send_msg(chat_id, msg)
 

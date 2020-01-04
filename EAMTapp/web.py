@@ -47,8 +47,21 @@ def get_rooms(soup=None):
     rooms_formatted = []
     for entry in rooms:
         # get room number
-        room_num = entry[:4]
-        entry = entry[4:]
+        if entry.startswith('BLACKBOX'):
+            room_num = 'BLACKBOX'
+            entry = entry[8:]
+        elif entry.startswith('D_FUAJEE'):
+            room_num = 'D_FUAJEE'
+            entry = entry[8:]
+        elif entry.startswith('SAKALA'):
+            room_num = 'SAKALA'
+            entry = entry[6:]
+        elif entry.startswith('SUUR_SAAL'):
+            room_num = 'SUUR_SAAL'
+            entry = entry[9:]
+        else:
+            room_num = entry[:4]
+            entry = entry[4:]
         # get room status
         if entry[:4] == 'läbi':
             status = 'läbi'

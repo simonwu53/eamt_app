@@ -235,12 +235,13 @@ class Bot:
         LOG.info('Inserted %d new rooms.' % len(rooms))
         return
 
-    def __get_room(self, cur=None, full_name=None, room_num=None):
+    def __get_room(self, cur=None, full_name=None, room_num=None, fuzzy_name=None):
         """
         Search room by holder's name or room number
         :param cur: db cursor
         :param full_name: full name want to query
         :param room_num: room number want to query
+        :param fuzzy_name: part of the full name, fuzzy search
         return query result list, could be an empty list
         """
         if cur is None:
@@ -258,7 +259,13 @@ class Bot:
             cur.execute('SELECT room, status, holder FROM rooms WHERE room = ?', (room_num,))
             return cur.fetchall()
 
-        LOG.error(f'Invalid room query: name={full_name}, num={room_num}')
+        if fuzzy_name is not None:
+            LOG.info('Querying room info by fuzzy name: %s' % fuzzy_name)
+            fuzzy_name = '%' + fuzzy_name.upper() + '%'
+            cur.execute('SELECT room, status, holder FROM rooms WHERE holder LIKE ?', (fuzzy_name,))
+            return cur.fetchall()
+
+        LOG.error(f'Invalid room query: name={full_name}, num={room_num}, fuzzy={fuzzy_name}')
         return []
 
     def __clear_rooms(self, cur=None):
@@ -372,7 +379,8 @@ class Bot:
                         formatted_result = [f"{room_num:<10}{status:<10}{holder:>5}" for room_num, status, holder in rooms]
                         room_num, status, holder = "Room", "Time", "Name"
                         msg = '\n'.join([f"{room_num:<10}{status:<10}{holder:>5}"] + formatted_result)
-                        msg += '\nTotal rooms: %d' % len(rooms)
+                        msg += '\nTotal rooms: %d    läbi: %d' % (len(rooms),
+                                                                  sum([1 if s=='läbi' else 0 for _, s, _ in rooms]))
                         _ = self.__send_msg(chat_id, msg)
 
             # CASE 4: get daily menu
@@ -396,15 +404,32 @@ class Bot:
                 if len(msg['text'].split(' ')) == 1:
                     LOG.error('Querying room without input a name!')
                     _ = self.__send_msg(chat_id,
-                                        "Error. You should input full name after command, using spaces as separators.")
+                                        "Error. You should input full name after command, using spaces as separators.\n"
+                                        "If you input a part of the full name, a fuzzy search will be performed.")
 
                 else:
                     # remove header
                     msg = msg['text'][18:]
                     res = self.__get_room(cur=cur, full_name=msg)
                     if not res:
-                        _ = self.__send_msg(chat_id, "No result. (Could not find)")
-                        LOG.info('Room not found.')
+                        msg_token = self.__send_msg(chat_id,
+                                                    "No result. Trying fuzzy search with name: %s" % msg)
+                        LOG.info('Room not found. Trying fuzzy search with name: %s...' % msg)
+                        # fuzzy search
+                        res = self.__get_room(cur=cur, fuzzy_name=msg)
+                        if not res:
+                            LOG.info('Room not found.')
+                            _ = self.__update_msg(chat_id, msg_token['message_id'],
+                                                  "No result. Could not find room associated with name: %s." % msg)
+                        else:
+                            # format the feedback
+                            formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in
+                                                res]
+                            room_num, status, holder = "Room", "Time", "Name"
+                            msg = '\n'.join([f"{room_num:<8}{status:<10}{holder:>5}"] + formatted_result)
+                            _ = self.__update_msg(chat_id, msg_token['message_id'], msg)
+                            LOG.info('%d room(s) found.' % len(formatted_result))
+
                     else:
                         # format the feedback
                         formatted_result = [f"{room_num:<8}{status:<10}{holder:>5}" for room_num, status, holder in res]
@@ -601,7 +626,6 @@ class Bot:
     def periodic_tasks(self):
         def task():
             cc = 1
-            flag = True
             while True:
                 if not self.__is_running:
                     LOG.info('Periodic tasks have been stopped.')
@@ -611,11 +635,8 @@ class Bot:
                 if not self.__threads['room_monitor'].isAlive() and cc%10==0:
                     LOG.warning('[P-task]:Room monitor is stopped. Restarting...')
                     self.room_monitor(interval=self.__refresh_interval, night_pause=self.__night_hours)
-                    flag = False
-
-                # report
-                if flag:
-                    LOG.info('[P-task]:All tasks working.')
+                elif cc%10==0:
+                    LOG.info('[P-task]:Room monitor working.')
 
                 sleep(60)
                 cc = cc % 6000000000000 + 1

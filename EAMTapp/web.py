@@ -143,19 +143,17 @@ def get_room_reservation(room, week, year, month, soup=None):
 
 class WebBrowser:
     def __init__(self):
-        LOG.info('Starting PhantomJS Web Browser...')
-        # headless driver
-        self.__browser = PhantomJS()
-        LOG.info('Web Browser is ready!')
+        LOG.info('PhantomJS Web Browser is ready!')
         return
 
     def get_dailymeal(self):
         LOG.info('Fetching daily meal menu...')
+        driver = PhantomJS()
         output = None
         # open page in headless browser
-        self.__browser.get('https://sise.ema.edu.ee/')
+        driver.get('https://sise.ema.edu.ee/')
         # parse page source in bs4
-        soup = BeautifulSoup(self.__browser.page_source, features='lxml')
+        soup = BeautifulSoup(driver.page_source, features='lxml')
         # get a list of columns from the page source
         res = soup.findAll(attrs={'class': 'rcorners2', 'colspan': '1'})
 
@@ -185,10 +183,10 @@ class WebBrowser:
             output = title + dishes
 
             LOG.info('Sent %d menu dishes to server.' % len(menu))
+        driver.quit()
         return output
 
     def on_stop(self):
         # close driver
-        self.__browser.quit()
         LOG.info('Web Browser driver has stopped.')
         return
